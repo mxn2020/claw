@@ -1,11 +1,21 @@
-import { useQuery } from "convex/react";
+import { useQuery, useAction } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useViewMode } from "../../context/ViewModeContext";
 
+type OutboundLogLine = {
+    id: string;
+    timestamp: number;
+    level: "info" | "warn" | "error" | "debug" | "trace";
+    source: "gateway";
+    serverId: string;
+    instanceId: string;
+    message: string;
+};
+
 export default function AdminLogsPage() {
     const serversData = useQuery(api.servers.listWithInstances);
-    const logsData = useQuery(api.logs.list, { limit: 500 });
+    const tailLogs = useAction(api.logs.tail);
     const { viewMode } = useViewMode();
 
     const [selectedServer, setSelectedServer] = useState<string>("all");
@@ -14,8 +24,72 @@ export default function AdminLogsPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [autoScroll, setAutoScroll] = useState(true);
 
+    const [logsData, setLogsData] = useState<OutboundLogLine[]>([]);
+    const cursorsRef = useRef<Record<string, number | null>>({});
+
     const logsEndRef = useRef<HTMLDivElement>(null);
     const logsContainerRef = useRef<HTMLDivElement>(null);
+
+    // Polling logic for Gateway WS Proxy
+    useEffect(() => {
+        if (!autoScroll) return;
+
+        let active = true;
+        let timer: ReturnType<typeof setTimeout>;
+
+        const poll = async () => {
+            try {
+                // Pass current filters to the backend to minimize traffic
+                const res = await tailLogs({
+                    limit: 150,
+                    cursors: cursorsRef.current,
+                    ...(selectedServer !== "all" ? { serverId: selectedServer } : {}),
+                    ...(selectedInstance !== "all" ? { instanceId: selectedInstance } : {}),
+                });
+
+                if (!active) return;
+
+                if (res) {
+                    cursorsRef.current = Object.assign({}, cursorsRef.current, res.cursors);
+
+                    if (res.logs && res.logs.length > 0) {
+                        setLogsData(prev => {
+                            const merged = [...res.logs, ...prev];
+                            // Deduplicate by ID just in case
+                            const uniqueMap = new Map();
+                            for (const log of merged) {
+                                uniqueMap.set(log.id, log);
+                            }
+                            const unique = Array.from(uniqueMap.values());
+                            // Keep max 2000 logs in memory, sorting descending (newest first)
+                            unique.sort((a, b) => b.timestamp - a.timestamp);
+                            return unique.slice(0, 2000);
+                        });
+                    }
+                }
+
+                timer = setTimeout(poll, 2500);
+            } catch (err) {
+                console.error("Log fetch failed:", err);
+                if (active) timer = setTimeout(poll, 10000); // Back off heavily on error
+            }
+        };
+
+        // Start polling 
+        poll();
+
+        return () => {
+            active = false;
+            clearTimeout(timer);
+        };
+    }, [autoScroll, tailLogs, selectedServer, selectedInstance]);
+
+    // Cleanup cursors when changing specific targets so we don't accidentally pull from stale cursors
+    useEffect(() => {
+        cursorsRef.current = {};
+        setLogsData([]);
+    }, [selectedServer, selectedInstance]);
+
 
     // Auto-scroll logic
     useEffect(() => {
@@ -39,7 +113,7 @@ export default function AdminLogsPage() {
         return server ? server.instances : [];
     }, [serversData, selectedServer]);
 
-    // Apply filters
+    // Apply explicit frontend filters
     const filteredLogs = useMemo(() => {
         if (!logsData) return [];
         return logsData.filter(log => {
@@ -77,7 +151,7 @@ export default function AdminLogsPage() {
         return "";
     };
 
-    if (serversData === undefined || logsData === undefined) {
+    if (serversData === undefined) {
         return <div className="loading-container"><div className="loading-spinner" /><span className="loading-text">Loading Logs…</span></div>;
     }
 
@@ -134,7 +208,7 @@ export default function AdminLogsPage() {
 
             <div className="logs-terminal" ref={logsContainerRef} onScroll={handleScroll}>
                 {filteredLogs.length === 0 ? (
-                    <div className="terminal-empty">No logs match the current filters.</div>
+                    <div className="terminal-empty">No logs match the current filters or connecting to gateway...</div>
                 ) : (
                     filteredLogs.map(log => (
                         <div key={log.id} className={`log-line level-${log.level}`}>

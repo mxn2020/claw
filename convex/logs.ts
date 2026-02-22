@@ -1,113 +1,250 @@
-import { query } from "./_generated/server";
-import { v } from "convex/values";
+"use node";
 
-type LogEntry = {
+import { action } from "./_generated/server";
+import { v } from "convex/values";
+import { api } from "./_generated/api";
+import WebSocket from "ws";
+
+// Generate UUID for RPC calls
+function generateId() {
+    return Math.random().toString(36).substring(2, 15);
+}
+
+// Ensure the promise does not hang indefinitely
+const withTimeout = <T>(promise: Promise<T>, ms: number, failureMessage: string): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(failureMessage)), ms);
+    });
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+        clearTimeout(timeoutId);
+    });
+};
+
+type OutboundLogLine = {
     id: string;
     timestamp: number;
-    level: "info" | "warn" | "error";
-    source: "system" | "gateway" | "agent";
-    serverId?: string;
-    instanceId?: string;
+    level: "info" | "warn" | "error" | "debug" | "trace";
+    source: "gateway";
+    serverId: string;
+    instanceId: string;
     message: string;
 };
 
-// Mock log messages
-const SYSTEM_LOGS = [
-    { level: "info", msg: "SSH login successful for user admin" },
-    { level: "warn", msg: "High memory utilization detected (>85%)" },
-    { level: "info", msg: "Package updates available: 12 packages can be updated" },
-    { level: "error", msg: "Failed to sync chrony time daemon" },
-    { level: "info", msg: "New connection from 192.168.1.100" },
-    { level: "warn", msg: "Disk space on /var/log is reaching critical levels" },
-    { level: "info", msg: "System health check passed" },
-];
+async function fetchInstanceLogs(
+    serverIp: string,
+    instancePort: number,
+    token: string,
+    cursor: number | null,
+    limit: number
+): Promise<{ lines: any[]; newCursor: number | null; error?: string }> {
+    return new Promise((resolve, reject) => {
+        const url = `ws://${serverIp}:${instancePort}`;
+        const ws = new WebSocket(url, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
 
-const INSTANCE_LOGS = [
-    { level: "info", msg: "Gateway initialized successfully on port {port}" },
-    { level: "info", msg: "Received API request: GET /api/v1/status" },
-    { level: "warn", msg: "Rate limiting applied to IP 203.0.113.42" },
-    { level: "error", msg: "Connection to metadata service failed: timeout" },
-    { level: "info", msg: "Agent {name} started and registered" },
-    { level: "info", msg: "WebSocket connection established" },
-    { level: "error", msg: "Unhandled exception in processing pipeline: Cannot read property 'id' of undefined" },
-    { level: "warn", msg: "High latency detected on upstream route" },
-    { level: "info", msg: "Configuration reloaded" },
-];
+        const rpcId = generateId();
+        let connected = false;
 
-// Seed for deterministic random generation based on time/id
-function seededRandom(seed: number) {
-    const x = Math.sin(seed++) * 10000;
-    return x - Math.floor(x);
+        const timeout = setTimeout(() => {
+            ws.terminate();
+            resolve({ lines: [], newCursor: cursor, error: "Connection timeout" });
+        }, 5000);
+
+        ws.on("message", (data: WebSocket.RawData) => {
+            try {
+                const msg = JSON.parse(data.toString());
+
+                // 1. Handshake
+                if (msg.type === "connect.challenge") {
+                    const nonce = msg.payload.nonce;
+                    const timestamp = msg.payload.timestamp;
+                    ws.send(JSON.stringify({
+                        type: "connect",
+                        payload: {
+                            role: "operator",
+                            scopes: ["operator.read"],
+                            signature: "",
+                            timestamp,
+                            nonce
+                        }
+                    }));
+                }
+                else if (msg.type === "hello-ok") {
+                    connected = true;
+                    // Provide the params expected by logs.tail
+                    ws.send(JSON.stringify({
+                        type: "call",
+                        id: rpcId,
+                        method: "logs.tail",
+                        params: {
+                            limit,
+                            ...(cursor != null ? { cursor } : {})
+                        }
+                    }));
+                }
+                else if (msg.type === "hello-error") {
+                    clearTimeout(timeout);
+                    ws.terminate();
+                    resolve({ lines: [], newCursor: cursor, error: `Auth failed: ${JSON.stringify(msg.payload)}` });
+                }
+
+                // 2. RPC Response
+                else if (msg.type === "call" || msg.id === rpcId) {
+                    clearTimeout(timeout);
+                    ws.terminate();
+
+                    if (msg.payload && Array.isArray(msg.payload.lines)) {
+                        resolve({
+                            lines: msg.payload.lines,
+                            newCursor: msg.payload.cursor ?? null
+                        });
+                    } else {
+                        resolve({ lines: [], newCursor: cursor, error: "Invalid response payload" });
+                    }
+                }
+            } catch (err) {
+                clearTimeout(timeout);
+                ws.terminate();
+                resolve({ lines: [], newCursor: cursor, error: `Protocol error: ${(err as Error).message}` });
+            }
+        });
+
+        ws.on("error", (err: Error) => {
+            clearTimeout(timeout);
+            resolve({ lines: [], newCursor: cursor, error: err.message });
+        });
+
+        ws.on("close", () => {
+            clearTimeout(timeout);
+            if (!connected) {
+                resolve({ lines: [], newCursor: cursor, error: "Connection closed unexpectedly" });
+            }
+        });
+    });
 }
 
-export const list = query({
+function parseGatewayLogLine(raw: string): Partial<OutboundLogLine> | null {
+    // OpenClaw logs have the format:
+    // {"time":"2026-02-22T12:00:00.000Z", "level":"info", "message":"...", "module":"system", ...}
+    // Alternatively, they could be text, e.g. "2026-02-22T12:00:00.000Z INFO [system] ..."
+    try {
+        const parsed = JSON.parse(raw);
+        if (parsed.time && parsed.level) {
+            return {
+                timestamp: new Date(parsed.time).getTime(),
+                level: (parsed.level.toLowerCase() as any) || "info",
+                message: parsed.message || raw,
+            };
+        }
+    } catch {
+        // Fallback or text logs
+        const match = raw.match(/^([0-9T:.-]+Z?)\s+(\w+)\s+(.+)$/);
+        if (match) {
+            return {
+                timestamp: new Date(match[1]).getTime() || Date.now(),
+                level: (match[2].toLowerCase() as any) || "info",
+                message: match[3],
+            };
+        }
+    }
+
+    // If we can't parse it well, return it as info
+    return {
+        timestamp: Date.now(),
+        level: "info",
+        message: raw
+    };
+}
+
+export const tail = action({
     args: {
-        limit: v.optional(v.number()),
+        serverId: v.optional(v.string()),         // Filter at DB level
+        instanceId: v.optional(v.string()),       // Filter at DB level
+        limit: v.optional(v.number()),            // Per-instance limit
+        cursors: v.optional(v.record(v.string(), v.union(v.number(), v.null()))), // { instanceId: cursor }
     },
     handler: async (ctx, args) => {
-        const servers = await ctx.db.query("servers").collect();
-        const instances = await ctx.db.query("instances").collect();
-        const limit = args.limit || 100;
+        const servers = await ctx.runQuery(api.servers.listWithInstances);
+        const limitPerInstance = args.limit || 50;
+        const inboundCursors = args.cursors || {};
 
-        const logs: LogEntry[] = [];
-        const now = Date.now();
-        // Generate logs spread over the last 2 hours
-        const timeWindow = 2 * 60 * 60 * 1000;
+        let targetedInstances: Array<{ server: any; instance: any }> = [];
 
-        for (let i = 0; i < limit; i++) {
-            // Use index purely to spread them backward in time
-            const logTime = now - Math.floor(seededRandom(i * 10) * timeWindow);
+        for (const server of servers) {
+            if (args.serverId && args.serverId !== "all" && server._id !== args.serverId) continue;
 
-            // Randomly pick if it's a server or instance log
-            const isInstanceLog = seededRandom(i * 11) > 0.3; // 70% instance logs
+            for (const instance of server.instances) {
+                if (args.instanceId && args.instanceId !== "all" && instance._id !== args.instanceId) continue;
+                if (!instance.token) continue;
 
-            let level: "info" | "warn" | "error" = "info";
-            const levelRand = seededRandom(i * 12);
-            if (levelRand > 0.9) level = "error";
-            else if (levelRand > 0.7) level = "warn";
-
-            if (isInstanceLog && instances.length > 0) {
-                const instIndex = Math.floor(seededRandom(i * 13) * instances.length);
-                const inst = instances[instIndex];
-                const msgTemplate = INSTANCE_LOGS[Math.floor(seededRandom(i * 14) * INSTANCE_LOGS.length)];
-
-                // Keep level from random or override if template is explicit
-                const finalLevel = levelRand > 0.5 ? msgTemplate.level as "info" | "warn" | "error" : level;
-
-                let msg = msgTemplate.msg
-                    .replace("{port}", inst.port.toString())
-                    .replace("{name}", inst.name || `Instance ${inst.instanceNumber}`);
-
-                logs.push({
-                    id: `log_inst_${i}_${logTime}`,
-                    timestamp: logTime,
-                    level: finalLevel,
-                    source: "gateway",
-                    serverId: inst.serverId,
-                    instanceId: inst._id,
-                    message: msg,
-                });
-            } else if (servers.length > 0) {
-                const srvIndex = Math.floor(seededRandom(i * 15) * servers.length);
-                const srv = servers[srvIndex];
-                const msgTemplate = SYSTEM_LOGS[Math.floor(seededRandom(i * 16) * SYSTEM_LOGS.length)];
-
-                const finalLevel = levelRand > 0.5 ? msgTemplate.level as "info" | "warn" | "error" : level;
-
-                logs.push({
-                    id: `log_sys_${i}_${logTime}`,
-                    timestamp: logTime,
-                    level: finalLevel,
-                    source: "system",
-                    serverId: srv._id,
-                    message: msgTemplate.msg,
-                });
+                targetedInstances.push({ server, instance });
             }
         }
 
-        // Sort descending (newest first)
-        logs.sort((a, b) => b.timestamp - a.timestamp);
+        const outLogs: OutboundLogLine[] = [];
+        const newCursors: Record<string, number | null> = { ...inboundCursors };
 
-        return logs;
-    },
+        // Fetch logs across all targeted instances in parallel
+        const promises = targetedInstances.map(async ({ server, instance }) => {
+            const cursor = inboundCursors[instance._id] ?? null;
+
+            const result = await fetchInstanceLogs(
+                server.ip,
+                instance.port,
+                instance.token,
+                cursor,
+                limitPerInstance
+            );
+
+            newCursors[instance._id] = result.newCursor;
+
+            // Optional: If error, you could emit an error log line into the stream warning the dashboard
+            if (result.error) {
+                outLogs.push({
+                    id: generateId(),
+                    timestamp: Date.now(),
+                    level: "error",
+                    source: "gateway",
+                    serverId: server._id,
+                    instanceId: instance._id,
+                    message: `[Admin Proxy Error] Could not fetch logs: ${result.error}`,
+                });
+                return;
+            }
+
+            for (let i = 0; i < result.lines.length; i++) {
+                const rawLine = result.lines[i];
+                const parsed = parseGatewayLogLine(rawLine);
+                if (parsed) {
+                    outLogs.push({
+                        id: generateId() + i,
+                        timestamp: parsed.timestamp || Date.now(),
+                        level: parsed.level || "info",
+                        source: "gateway",
+                        serverId: server._id,
+                        instanceId: instance._id,
+                        message: parsed.message || rawLine,
+                    });
+                }
+            }
+        });
+
+        await Promise.all(promises);
+
+        // Sort descending (newest first for frontend to put at bottom)
+        // Wait, the frontend says: sort((a, b) => a.timestamp - b.timestamp) (oldest top, newest bottom).
+        // Let's sort oldest first or newest first? Frontend will sort anyway. Let's do descending here so slicing works if we need to.
+        outLogs.sort((a, b) => b.timestamp - a.timestamp);
+
+        // For safety, limit the maximum returned items globally
+        const globalLimit = (args.limit || 100) * targetedInstances.length;
+        const trimmedLogs = outLogs.slice(0, globalLimit);
+
+        return {
+            logs: trimmedLogs,
+            cursors: newCursors
+        };
+    }
 });
