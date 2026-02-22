@@ -1,0 +1,386 @@
+/* ================================================
+   Admin Layout Styles
+   ================================================ */
+
+.admin {
+    display: flex;
+    min-height: 100vh;
+    background: var(--bg-primary);
+}
+
+.admin-sidebar {
+    width: 260px;
+    min-width: 260px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+.admin-sidebar-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.admin-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.admin-title-icon {
+    font-size: 1.5rem;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(252, 129, 129, 0.1);
+    border-radius: var(--radius-md);
+    flex-shrink: 0;
+}
+
+.admin-title-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.admin-title-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.admin-title-sub {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.admin-content {
+    flex: 1;
+    padding: 32px 40px;
+    overflow-y: auto;
+    min-height: 100vh;
+}
+
+/* ---------- Admin Tables ---------- */
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.admin-table th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-subtle);
+    white-space: nowrap;
+}
+
+.admin-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    vertical-align: middle;
+}
+
+.admin-table tr:hover td {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.admin-table .instance-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.admin-table .cell-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+
+.admin-table .cell-name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.admin-table .cell-mono {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+}
+
+.admin-table .cell-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 100px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.cell-status.running {
+    background: var(--success-bg);
+    color: var(--success);
+}
+
+.cell-status.stopped {
+    background: var(--error-bg);
+    color: var(--error);
+}
+
+.cell-status.error {
+    background: rgba(236, 201, 75, 0.1);
+    color: var(--warning);
+}
+
+/* Table actions */
+.table-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.table-action-btn {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: var(--font-sans);
+    white-space: nowrap;
+}
+
+.table-action-btn:hover {
+    background: var(--accent);
+    color: var(--bg-primary);
+    border-color: var(--accent);
+}
+
+.table-action-btn.danger:hover {
+    background: var(--error);
+    border-color: var(--error);
+}
+
+.table-action-btn.success:hover {
+    background: var(--success);
+    border-color: var(--success);
+}
+
+.table-action-btn.warning:hover {
+    background: var(--warning);
+    border-color: var(--warning);
+    color: var(--bg-primary);
+}
+
+/* ---------- Admin Cards ---------- */
+.admin-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin-bottom: 28px;
+}
+
+.admin-stat {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 18px 20px;
+    transition: all 0.2s ease;
+}
+
+.admin-stat:hover {
+    border-color: var(--border-accent);
+    box-shadow: var(--shadow-glow);
+}
+
+.admin-stat-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.admin-stat-value {
+    font-size: 1.3rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    line-height: 1.2;
+}
+
+/* Toolbar */
+.admin-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.admin-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.admin-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.toolbar-btn {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 500;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: var(--font-sans);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.toolbar-btn:hover {
+    background: var(--accent);
+    color: var(--bg-primary);
+    border-color: var(--accent);
+}
+
+.toolbar-btn.primary {
+    background: var(--accent);
+    color: var(--bg-primary);
+    border-color: var(--accent);
+}
+
+.toolbar-btn.primary:hover {
+    background: var(--accent-hover);
+}
+
+.toolbar-btn.danger:hover {
+    background: var(--error);
+    border-color: var(--error);
+}
+
+/* ---------- Add Instance Modal ---------- */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    animation: fadeIn 0.15s ease;
+}
+
+.modal {
+    background: var(--bg-card);
+    border: 1px solid var(--border-accent);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    width: 100%;
+    max-width: 520px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+    animation: fadeIn 0.2s ease;
+}
+
+.modal h2 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.modal-btn {
+    padding: 9px 20px;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.modal-btn.cancel {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+}
+
+.modal-btn.cancel:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.modal-btn.confirm {
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    color: var(--bg-primary);
+}
+
+.modal-btn.confirm:hover {
+    background: var(--accent-hover);
+}
+
+/* Checkbox */
+.table-checkbox {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .admin {
+        flex-direction: column;
+    }
+
+    .admin-sidebar {
+        width: 100%;
+        min-width: 100%;
+        height: auto;
+        position: relative;
+    }
+
+    .admin-content {
+        padding: 20px 16px;
+    }
+}

@@ -33,5 +33,11 @@ export default defineSchema({
     pid: v.optional(v.number()),
     memoryMb: v.optional(v.number()),
     startedAt: v.optional(v.string()),
+    // Named instance metadata
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    icon: v.optional(v.string()),
+    color: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
   }).index("by_server", ["serverId"]),
 });
