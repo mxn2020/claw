@@ -9,6 +9,7 @@
  */
 
 import type * as instances from "../instances.js";
+import type * as logs from "../logs.js";
 import type * as seed from "../seed.js";
 import type * as servers from "../servers.js";
 
@@ -20,6 +21,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   instances: typeof instances;
+  logs: typeof logs;
   seed: typeof seed;
   servers: typeof servers;
 }>;
