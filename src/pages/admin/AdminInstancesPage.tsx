@@ -194,7 +194,7 @@ function AddInstanceModal({
     });
 
     const handleSubmit = async () => {
-        const configPath = form.configPath || `~/.openclaw${form.instanceNumber}/config.json`;
+        const configPath = form.configPath || `~/.clawspace${form.instanceNumber}/config.json`;
         const token = form.token || crypto.randomUUID().replace(/-/g, "").slice(0, 48);
         await onCreate({
             serverId: form.serverId as Id<"servers">,

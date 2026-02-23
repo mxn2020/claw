@@ -42,3 +42,6 @@ Thumbs.db
 
 # Private / personal notes
 _myclaw/
+
+# Seed file
+convex/seed.ts

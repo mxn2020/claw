@@ -14,7 +14,7 @@ const ViewModeContext = createContext<ViewModeContextValue>({
     setViewMode: () => { },
 });
 
-const STORAGE_KEY = "openclaw-view-mode";
+const STORAGE_KEY = "clawspace-view-mode";
 
 export function ViewModeProvider({ children }: { children: ReactNode }) {
     const [viewMode, setViewModeState] = useState<ViewMode>(() => {
