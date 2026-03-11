@@ -45,3 +45,7 @@ _myclaw/
 
 # Seed file
 convex/seed.ts
+
+# Added by AI Agent
+.env.*
+!.env.example

@@ -9,9 +9,11 @@
     "dev:all": "npx concurrently \"npm run dev\" \"npm run dev:convex\"",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "stop": "pkill -f 'vite.*openclaw' || true"
   },
   "dependencies": {
+    "@vercel/analytics": "^1.6.1",
     "convex": "^1.32.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

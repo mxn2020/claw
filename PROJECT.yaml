@@ -1,0 +1,16 @@
+name: clawspace
+project_scope: main
+project_type: standalone
+description: React + TypeScript + Vite
+tier: prototype
+lane: claw-platform
+priority: medium
+oss: false
+stack: [typescript, react, convex, vite]
+repo: "https://github.com/mxn2020/claw"
+deploy_url: null
+last_active: 2026-02-23
+tags: [clawspace, openclaw, ai-gateway, tools]
+notes: null
+id: b419390d-6507-4f76-b5dd-97dabe8fba92
+category: oss-tool
